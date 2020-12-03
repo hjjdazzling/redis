@@ -335,7 +335,7 @@ void touchWatchedKey(redisDb *db, robj *key) {
     listRewind(clients,&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
-
+        //打开客户端状态CLIENT_DIRTY_CAS
         c->flags |= CLIENT_DIRTY_CAS;
     }
 }

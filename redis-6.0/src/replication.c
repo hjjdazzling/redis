@@ -384,7 +384,9 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
         addReplyProto(slave,buf,buflen);
     }
 }
-
+/*
+    向服务器发送命令信息
+*/
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
@@ -417,6 +419,7 @@ void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv,
     cmdobj = createObject(OBJ_STRING,cmdrepr);
 
     listRewind(monitors,&li);
+    //遍历server.monitors的客户端链表发送命令
     while((ln = listNext(&li))) {
         client *monitor = ln->value;
         addReply(monitor,cmdobj);

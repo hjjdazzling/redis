@@ -66,6 +66,7 @@ struct ldbState {
     int forked; /* Is this a fork()ed debugging session? */
     list *logs; /* List of messages to send to the client. */
     list *traces; /* Messages about Redis commands executed since last stop.*/
+    //所有派生的调试会话pids
     list *children; /* All forked debugging sessions pids. */
     int bp[LDB_BREAKPOINTS_MAX]; /* An array of breakpoints line numbers. */
     int bpcount; /* Number of valid entries inside bp. */
@@ -1949,6 +1950,7 @@ int ldbRemoveChild(pid_t pid) {
 
 /* Return the number of children we still did not receive termination
  * acknowledge via wait() in the parent process. */
+ //返回我们仍然没有通过父进程中的wait()接收到终止通知的子进程的数量
 int ldbPendingChildren(void) {
     return listLength(ldb.children);
 }

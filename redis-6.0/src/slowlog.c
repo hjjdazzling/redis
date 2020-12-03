@@ -121,12 +121,16 @@ void slowlogInit(void) {
  * This function will make sure to trim the slow log accordingly to the
  * configured max length. */
 void slowlogPushEntryIfNeeded(client *c, robj **argv, int argc, long long duration) {
+    //如果慢查询触发时间小于0 表示禁用了
     if (server.slowlog_log_slower_than < 0) return; /* Slowlog disabled */
+    //如果查询时间大于配置的慢查询时间  则记录
     if (duration >= server.slowlog_log_slower_than)
+        //头插法
         listAddNodeHead(server.slowlog,
                         slowlogCreateEntry(c,argv,argc,duration));
 
     /* Remove old entries if needed. */
+    //如果超出配置的长度，则删除最新的
     while (listLength(server.slowlog) > server.slowlog_max_len)
         listDelNode(server.slowlog,listLast(server.slowlog));
 }

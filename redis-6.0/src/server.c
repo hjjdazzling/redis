@@ -1787,7 +1787,7 @@ void checkChildrenDone(void) {
      * one. */
     if (server.rdb_child_pid != -1 && server.rdb_pipe_conns)
         return;
-
+    //执行wait3函数
     if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
         int exitcode = WEXITSTATUS(statloc);
         int bysignal = 0;
@@ -1879,7 +1879,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             }
         }
     }
-
+    //更新命令的执行次数
     run_with_period(100) {
         trackInstantaneousMetric(STATS_METRIC_COMMAND,server.stat_numcommands);
         trackInstantaneousMetric(STATS_METRIC_NET_INPUT,
@@ -1982,7 +1982,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
      * a BGSAVE was in progress. */
-     //进行AOF重写操作
+     //进行被推迟的AOF重写操作
     if (!hasActiveChildProcess() &&
         server.aof_rewrite_scheduled)
     {
@@ -1990,7 +1990,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Check if a background saving or AOF rewrite in progress terminated. */
-    //检查后台保存或AOF重写是否有执行延迟的
+    //hasActiveChildProcess 检查后台保存或AOF重写是否有执行延迟的
+    //ldbPendingChildren  返回我们仍然没有通过父进程中的wait()接收到终止通知的子进程的数量
     if (hasActiveChildProcess() || ldbPendingChildren())
     {
         checkChildrenDone();
@@ -2023,6 +2024,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
         }
 
         /* Trigger an AOF rewrite if needed. */
+        //检查AOF重写条件是否满足
         if (server.aof_state == AOF_ON &&
             !hasActiveChildProcess() &&
             server.aof_rewrite_perc &&
@@ -2352,22 +2354,27 @@ void createSharedObjects(void) {
     shared.minstring = sdsnew("minstring");
     shared.maxstring = sdsnew("maxstring");
 }
-
+//初始化服务器状态结构
 void initServerConfig(void) {
     int j;
 
     updateCachedTime(1);
+    //设置服务器运行id
     getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
+    //为运行id加上结尾字符 '\0'
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
     changeReplicationId();
     clearReplicationId2();
+    //设置默认的服务器频率
     server.hz = CONFIG_DEFAULT_HZ; /* Initialize it ASAP, even if it may get
                                       updated later after loading the config.
                                       This value may be used before the server
                                       is initialized. */
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
+    //设置默认配置文件路径
     server.configfile = NULL;
     server.executable = NULL;
+    //设置服务器的运行架构
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
     server.bindaddr_count = 0;
     server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
@@ -2405,6 +2412,7 @@ void initServerConfig(void) {
     server.loading_process_events_interval_bytes = (1024*1024*2);
 
     server.lruclock = getLRUClock();
+    //设置默认的save的触发条件
     resetServerSaveParams();
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
@@ -2450,6 +2458,7 @@ void initServerConfig(void) {
     /* Command table -- we initiialize it here as it is part of the
      * initial configuration, since command names may be changed via
      * redis.conf using the rename-command directive. */
+     //初始化命令表
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
@@ -2480,7 +2489,7 @@ void initServerConfig(void) {
      * script to the slave / AOF. This is the new way starting from
      * Redis 5. However it is possible to revert it via redis.conf. */
     server.lua_always_replicate_commands = 1;
-
+    //载入配置文件的选项
     initConfigValues();
 }
 
@@ -2826,7 +2835,7 @@ void resetServerStats(void) {
     server.stat_unexpected_error_replies = 0;
     server.aof_delayed_fsync = 0;
 }
-
+//初始化服务器的数据结构
 void initServer(void) {
     int j;
 
@@ -2845,8 +2854,10 @@ void initServer(void) {
     server.pid = getpid();
     server.current_client = NULL;
     server.fixed_time_expire = 0;
+    //初始化客户端连接的链表
     server.clients = listCreate();
     server.clients_index = raxNew();
+    //初始化客户端关闭连接的链表
     server.clients_to_close = listCreate();
     server.slaves = listCreate();
     server.monitors = listCreate();
@@ -2867,7 +2878,7 @@ void initServer(void) {
         serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
         exit(1);
     }
-
+    //创建共享对象
     createSharedObjects();
     adjustOpenFilesLimit();
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
@@ -2880,6 +2891,7 @@ void initServer(void) {
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
+    //打开服务器的监听端口
     if (server.port != 0 &&
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
@@ -2906,6 +2918,7 @@ void initServer(void) {
     }
 
     /* Create the Redis databases, and initialize other internal state. */
+    //初始化服务器的所有数据库
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
@@ -2919,7 +2932,9 @@ void initServer(void) {
         listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
+    //初始化保存频道信息的server.pubsub_channels的字典
     server.pubsub_channels = dictCreate(&keylistDictType,NULL);
+    //初始化保存模式订阅信息的server.pubsub_patterns的链表
     server.pubsub_patterns = listCreate();
     server.pubsub_patterns_dict = dictCreate(&keylistDictType,NULL);
     listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
@@ -2967,6 +2982,7 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
+     //为serverCron函数创建时间事件
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -3009,6 +3025,7 @@ void initServer(void) {
     aeSetAfterSleepProc(server.el,afterSleep);
 
     /* Open the AOF file if needed. */
+    //如果aof持久化功能开启，则打开现有的aof文件 不存在，则创建并打开一个新的AOF文件，为AOF写入做好准备
     if (server.aof_state == AOF_ON) {
         server.aof_fd = open(server.aof_filename,
                                O_WRONLY|O_APPEND|O_CREAT,0644);
@@ -3026,12 +3043,15 @@ void initServer(void) {
     if (server.arch_bits == 32 && server.maxmemory == 0) {
         serverLog(LL_WARNING,"Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
         server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
+        //设置默认的淘汰策略  eviction
         server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
     }
 
     if (server.cluster_enabled) clusterInit();
     replicationScriptCacheInit();
+    //初始化Lua脚本环境和属性
     scriptingInit(1);
+    //初始化用于保存慢查询日志的server.slowlog属性
     slowlogInit();
     latencyMonitorInit();
 }
@@ -5024,6 +5044,7 @@ int checkForSentinelMode(int argc, char **argv) {
 /* Function called at startup to load RDB or AOF file in memory. */
 void loadDataFromDisk(void) {
     long long start = ustime();
+    //如果AOF持久化功能开启，则是用AOF文件来还原数据库状态
     if (server.aof_state == AOF_ON) {
         if (loadAppendOnlyFile(server.aof_filename) == C_OK)
             serverLog(LL_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
@@ -5200,6 +5221,8 @@ int main(int argc, char **argv) {
     getRandomBytes(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed(hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
+
+    //先初始化配置
     initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
@@ -5315,6 +5338,7 @@ int main(int argc, char **argv) {
     }
 
     readOOMScoreAdj();
+    //在初始化服务器数据结构
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
@@ -5330,6 +5354,7 @@ int main(int argc, char **argv) {
         moduleLoadFromQueue();
         ACLLoadUsersAtStartup();
         InitServerLast();
+        //加载AOF文件或者RDB文件 如果AOF开始则是用AOF文件还原数据库的状态，否则使用RDB
         loadDataFromDisk();
         if (server.cluster_enabled) {
             if (verifyClusterConfigWithData() == C_ERR) {
@@ -5361,13 +5386,13 @@ int main(int argc, char **argv) {
     }
 
     /* Warning the user about suspicious maxmemory setting. */
-    if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
+    if (server.maxmemory > 0 && server.maxmemor y < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
     redisSetCpuAffinity(server.server_cpulist);
     setOOMScoreAdj(-1);
-
+    //开始执行事件循环
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;

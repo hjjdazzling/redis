@@ -220,6 +220,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
 #define CLIENT_MULTI (1<<3)   /* This client is in a MULTI context */
 #define CLIENT_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
+//在使用事务的时候 watch的key发生了变化
 #define CLIENT_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
 #define CLIENT_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
 #define CLIENT_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
@@ -671,6 +672,7 @@ typedef struct redisDb {
     dict *expires;              /* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
+    //正在被watch命令监视的键
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
 
     int id;                     /* Database ID */
@@ -684,13 +686,18 @@ typedef struct redisDb {
 
 /* Client MULTI/EXEC state */
 typedef struct multiCmd {
+    //参数
     robj **argv;
+    //参数数量
     int argc;
+    //命令指针
     struct redisCommand *cmd;
 } multiCmd;
 
 typedef struct multiState {
+    //事务队列  FIFO顺序
     multiCmd *commands;     /* Array of MULTI commands */
+    //已经入队的命令个数
     int count;              /* Total number of MULTI commands */
     int cmd_flags;          /* The accumulated command flags OR-ed together.
                                So if at least a command has a given flag, it
@@ -840,7 +847,7 @@ typedef struct client {
     //记录输出缓冲区第一次到达软性限制的时间
     time_t obuf_soft_limit_reached_time;
 
-    //redis的标志位  每一位代表一个标志  在redis.h中定义
+    //redis的标志位  每一位代表一个标志  在server.h中定义
     uint64_t flags;         /* Client flags: CLIENT_* macros. */
     //是否通过了身份认证  0未通过  1通过了
     int authenticated;      /* Needed when the default user requires auth. */
@@ -862,6 +869,7 @@ typedef struct client {
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
     char slave_ip[NET_IP_STR_LEN]; /* Optionally given by REPLCONF ip-address */
     int slave_capa;         /* Slave capabilities: SLAVE_CAPA_* bitwise OR. */
+    //事务状态
     multiState mstate;      /* MULTI/EXEC state */
     int btype;              /* Type of blocking op if CLIENT_BLOCKED. */
     blockingState bpop;     /* blocking state */
@@ -1158,11 +1166,14 @@ struct redisServer {
     list *clients_to_close;     /* Clients to close asynchronously */
     list *clients_pending_write; /* There is to write or install handler. */
     list *clients_pending_read;  /* Client has pending read socket buffers. */
+
+    //*monitors 是使用了monitor命令的客户端的列表
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client;     /* Current client executing the command. */
     rax *clients_timeout_table; /* Radix tree for blocked clients timeouts. */
     long fixed_time_expire;     /* If > 0, expire keys against server.mstime. */
     rax *clients_index;         /* Active clients dictionary by client ID. */
+    //如果客户端已经暂停，则为true
     int clients_paused;         /* True if clients are currently paused */
     mstime_t clients_pause_end_time; /* Time when we undo clients_paused */
     char neterr[ANET_ERR_LEN];   /* Error buffer for anet.c */
@@ -1212,9 +1223,13 @@ struct redisServer {
     long long stat_sync_full;       /* Number of full resyncs with slaves. */
     long long stat_sync_partial_ok; /* Number of accepted PSYNC requests. */
     long long stat_sync_partial_err;/* Number of unaccepted PSYNC requests. */
+    //保存了所有慢查询日志的链表
     list *slowlog;                  /* SLOWLOG list of commands */
+    //下一条慢查询日志的ID 是最大的id+1
     long long slowlog_entry_id;     /* SLOWLOG current entry ID */
+    //服务器配置的slowlog_log_slower_than选项的值
     long long slowlog_log_slower_than; /* SLOWLOG time limit (to get logged) */
+    //服务器配置slowlog_max_len选项的值
     unsigned long slowlog_max_len;     /* SLOWLOG max number of items logged */
     struct malloc_stats cron_malloc_stats; /* sampled in serverCron(). */
     _Atomic long long stat_net_input_bytes; /* Bytes read from network. */
@@ -1269,12 +1284,15 @@ struct redisServer {
     off_t aof_current_size;         /* AOF current size. */
     off_t aof_fsync_offset;         /* AOF offset which is already synced to disk. */
     int aof_flush_sleep;            /* Micros to sleep before flush. (used by tests) */
+    //如果值为1 表示有BGREWRITEAOF命令由于正在执行的BGSAVE命令被延迟了
     int aof_rewrite_scheduled;      /* Rewrite once BGSAVE terminates. */
+    //记录执行BGREWRITEAOF命令的子进程的ID,如果没有正在执行的,则为-1
     pid_t aof_child_pid;            /* PID if rewriting process */
     //AOF重写缓冲区
     list *aof_rewrite_buf_blocks;   /* Hold changes during an AOF rewrite. */
     //AOF缓冲区
     sds aof_buf;      /* AOF buffer, written before entering the event loop */
+    //aof文件描述符
     int aof_fd;       /* File descriptor of currently selected AOF file */
     int aof_selected_db; /* Currently selected DB in AOF */
     time_t aof_flush_postponed_start; /* UNIX time of postponed AOF flush */
@@ -1304,12 +1322,14 @@ struct redisServer {
     long long dirty;                /* Changes to DB from the last save */
     //上一次存储的dirty计数器的值
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
-    //进行 pgsave 的子进程的id
+    //记录正在进行 bgsave 的子进程的id,如果没有正在执行的,记录为-1
     pid_t rdb_child_pid;            /* PID of RDB saving child */
     //rdb的配置信息
     struct saveparam *saveparams;   /* Save points array for RDB */
     int saveparamslen;              /* Number of saving points */
+    //rdb文件名
     char *rdb_filename;             /* Name of RDB file */
+    //在RDB中是否启用压缩
     int rdb_compression;            /* Use compression in RDB? */
     int rdb_checksum;               /* Use RDB checksum? */
     int rdb_del_sync_files;         /* Remove RDB files used only for SYNC if
@@ -1582,9 +1602,13 @@ struct redisFunctionSym {
 };
 
 typedef struct _redisSortObject {
+    //被排序的键的值
     robj *obj;
+    //权重
     union {
+        //排序数字值时使用
         double score;
+        //排序带有by选项的字符串值时使用
         robj *cmpobj;
     } u;
 } redisSortObject;

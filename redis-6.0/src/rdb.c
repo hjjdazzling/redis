@@ -2467,6 +2467,7 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
 }
 
 /* When a background RDB saving/transfer terminates, call the right handler. */
+//当后台RDB保存/传输终止时，调用正确的处理程序
 void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     switch(server.rdb_child_type) {
     case RDB_CHILD_TYPE_DISK:

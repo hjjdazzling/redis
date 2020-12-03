@@ -1791,6 +1791,7 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
             close(newfd);
         } else {
             /* AOF enabled, replace the old fd with the new one. */
+            //启用AOF，将旧的文件替换为新的文件
             oldfd = server.aof_fd;
             server.aof_fd = newfd;
             if (server.aof_fsync == AOF_FSYNC_ALWAYS)
