@@ -866,6 +866,7 @@ typedef struct client {
                                        copying this slave output buffer
                                        should use. */
     char replid[CONFIG_RUN_ID_SIZE+1]; /* Master replication ID (if master). */
+    //从服务器的监听端口号
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
     char slave_ip[NET_IP_STR_LEN]; /* Optionally given by REPLCONF ip-address */
     int slave_capa;         /* Slave capabilities: SLAVE_CAPA_* bitwise OR. */
@@ -1370,24 +1371,36 @@ struct redisServer {
     char *syslog_ident;             /* Syslog ident */
     int syslog_facility;            /* Syslog facility */
     /* Replication (master) */
+    // 对于主服务器是当前redis服务器运行ID  对于从服务器是其复制主服务器的运行ID
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
+    //从主服务器继承的运行id（用于主服务器失效的选举）
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
+    // 当前的复制偏移量
     long long master_repl_offset;   /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
+    //复制输出中最后选择的DB
     int slaveseldb;                 /* Last SELECTed DB in replication output */
+    //主服务器ping从服务器进行心跳检测的时间周期
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
+    //复制积压缓冲区  是个循环数组的队列 默认是1MB
     char *repl_backlog;             /* Replication backlog for partial syncs */
+    //复制积压缓冲区的大小
     long long repl_backlog_size;    /* Backlog circular buffer size */
+    //复制积压缓冲区的实际长度
     long long repl_backlog_histlen; /* Backlog actual data length */
+    //复制积压缓冲区的当前偏移量，即下一个要写入的字节
     long long repl_backlog_idx;     /* Backlog circular buffer current offset,
                                        that is the next byte will'll write to.*/
+    //复制积压缓冲区中第一个字节的复制“主偏移量”
     long long repl_backlog_off;     /* Replication "master offset" of first
                                        byte in the replication backlog buffer.*/
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
                                        gets released. */
     time_t repl_no_slaves_since;    /* We have no slaves since that time.
                                        Only valid if server.slaves len is 0. */
+    //要写入的最小的从服务器的数量
     int repl_min_slaves_to_write;   /* Min number of slaves to write. */
+    //从服务器的最大延迟
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
     int repl_diskless_sync;         /* Master send RDB to slaves sockets directly. */
@@ -1396,11 +1409,16 @@ struct redisServer {
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
     /* Replication (slave) */
     char *masteruser;               /* AUTH with this user and masterauth with master */
+    //复制中的认证主服务器的密码
     char *masterauth;               /* AUTH with this password with master */
+    //主服务器的地址
     char *masterhost;               /* Hostname of master */
+    //主服务器的端口
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
+    //当主从服务器成功建立连接之后，从服务器成为主服务器的客户端，同样的主服务器也会成为从服务器的客户端 master为主服务器
     client *master;     /* Client that is master for this slave */
+    //缓存用于执行psync主服务器客户端
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state;          /* Replication status if the instance is a slave */
